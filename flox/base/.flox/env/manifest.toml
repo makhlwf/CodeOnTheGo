@@ -81,7 +81,7 @@ on-activate = '''
     "cmake;3.31.6" \
     "platforms;android-35" \
     "platform-tools" \
-    "ndk;28.1.13356709"
+    "ndk;27.0.12077973"
 '''
 
 
