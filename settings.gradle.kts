@@ -75,8 +75,6 @@ dependencyResolutionManagement {
 	repositories {
 		google()
 		mavenCentral()
-		maven { url = uri("https://s01.oss.sonatype.org/content/repositories/snapshots/") }
-		maven { url = uri("https://s01.oss.sonatype.org/content/groups/public/") }
 		maven { url = uri("https://jitpack.io") }
 	}
 }
@@ -123,10 +121,10 @@ include(
 	":eventbus",
 	":eventbus-android",
 	":eventbus-events",
+	":git-core",
 	":gradle-plugin",
 	":gradle-plugin-config",
 	":idetooltips",
-	":layouteditor",
 	":lexers",
 	":logger",
 	":logsender",
@@ -139,19 +137,28 @@ include(
 	":templates-impl",
 	":treeview",
 	":uidesigner",
-	":vectormaster",
 	":xml-inflater",
 	":lsp:api",
 	":lsp:models",
+	":lsp:indexing",
 	":lsp:java",
+	":lsp:jvm-symbol-index",
+	":lsp:jvm-symbol-models",
+	":lsp:kotlin",
 	":lsp:xml",
+	":profiler",
 	":subprojects:aapt2-proto",
 	":subprojects:aaptcompiler",
 	":subprojects:builder-model-impl",
+	":subprojects:flamegraph",
 	":subprojects:flashbar",
 	":subprojects:framework-stubs",
+	":subprojects:hidden-apis",
+	":subprojects:hidden-apis-compat",
 	":subprojects:javac-services",
+	":subprojects:kotlin-analysis-api",
 	":subprojects:libjdwp",
+	":subprojects:privileged-services",
 	":subprojects:projects",
 	":subprojects:project-models",
 	":subprojects:shizuku-aidl",
@@ -181,11 +188,8 @@ include(
 	":plugin-api",
 	":plugin-api:plugin-builder",
 	":plugin-manager",
-    ":llama-api",
-    ":llama-impl",
-    ":cv-image-to-xml",
-    ":llama-api",
-    ":llama-impl"
+	":compose-preview",
+	":floating-window",
 )
 
 object FDroidConfig {

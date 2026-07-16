@@ -10,11 +10,15 @@ import com.itsaky.androidide.projects.api.AndroidModule
 import com.itsaky.androidide.projects.builder.BuildService
 import com.itsaky.androidide.projects.isPluginProject
 import com.itsaky.androidide.projects.models.assembleTaskOutputListingFile
+import com.itsaky.androidide.tooling.api.messages.BuildRunType
+import com.itsaky.androidide.tooling.api.messages.GradleBuildParams
 import com.itsaky.androidide.tooling.api.messages.TaskExecutionMessage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
@@ -29,6 +33,8 @@ class BuildViewModel : ViewModel() {
 		module: AndroidModule,
 		variant: AndroidModels.AndroidVariant,
 		launchInDebugMode: Boolean,
+		launchProfilerAfterInstall: Boolean = false,
+		gradleArgs: List<String> = emptyList(),
 	) {
 		if (_buildState.value is BuildState.InProgress) {
 			log.warn("Build is already in progress. Ignoring new request.")
@@ -45,33 +51,48 @@ class BuildViewModel : ViewModel() {
 			}
 
 			try {
-				val isPluginProject = IProjectManager.getInstance().isPluginProject()
-
-				val taskName = if (isPluginProject) {
-					if (variant.name.contains("debug", ignoreCase = true)) {
-						":assemblePluginDebug"
-					} else {
-						":assemblePlugin"
+				val isPluginProject =
+					withContext(Dispatchers.IO) {
+						IProjectManager.getInstance().isPluginProject()
 					}
-				} else {
-					"${module.path}:${variant.mainArtifact.assembleTaskName}"
-				}
 
-				val message = TaskExecutionMessage(tasks = listOf(taskName))
-				val result = buildService.executeTasks(message).await()
+				val taskName =
+					if (isPluginProject) {
+						if (variant.name.contains("debug", ignoreCase = true)) {
+							":assemblePluginDebug"
+						} else {
+							":assemblePlugin"
+						}
+					} else {
+						"${module.path}:${variant.mainArtifact.assembleTaskName}"
+					}
+
+				val message =
+					TaskExecutionMessage(
+						tasks = listOf(taskName),
+						buildId = buildService.nextBuildId(BuildRunType.TaskRun),
+						buildParams = GradleBuildParams(gradleArgs = gradleArgs),
+					)
+
+				val result =
+					withContext(Dispatchers.IO) {
+						buildService.executeTasks(message)
+					}.await()
 
 				if (result == null || !result.isSuccessful) {
-					throw RuntimeException("Task execution failed.")
+					throw RuntimeException("Task execution failed: ${result.failure}")
 				}
 
 				if (isPluginProject) {
 					val projectRoot = IProjectManager.getInstance().projectDirPath
-					val cgpFile = findPluginCgpFile(projectRoot, variant)
+					val cgpFile =
+						withContext(Dispatchers.IO) { findPluginCgpFile(projectRoot, variant) }
 					if (cgpFile != null) {
 						_buildState.value = BuildState.AwaitingPluginInstall(cgpFile)
 					} else {
 						log.warn("Plugin built successfully but .cgp file not found")
-						_buildState.value = BuildState.Error("Plugin built but output file (.cgp) not found in build/plugin")
+						_buildState.value =
+							BuildState.Error("Plugin built but output file (.cgp) not found in build/plugin")
 					}
 					return@launch
 				}
@@ -79,14 +100,21 @@ class BuildViewModel : ViewModel() {
 				val outputListingFile = variant.mainArtifact.assembleTaskOutputListingFile
 
 				val apkFile =
-					ApkMetadata.findApkFile(outputListingFile)
-						?: throw RuntimeException("No APK found in output listing file.")
+					withContext(Dispatchers.IO) {
+						ApkMetadata.findApkFile(outputListingFile)
+					} ?: throw RuntimeException("No APK found in output listing file.")
 
-				if (!apkFile.exists()) {
+				val apkExists = withContext(Dispatchers.IO) { apkFile.exists() }
+				if (!apkExists) {
 					throw RuntimeException("APK file specified does not exist: $apkFile")
 				}
 
-				_buildState.value = BuildState.AwaitingInstall(apkFile, launchInDebugMode)
+				_buildState.value =
+					BuildState.AwaitingInstall(
+						apkFile,
+						launchInDebugMode,
+						launchProfilerAfterInstall = launchProfilerAfterInstall,
+					)
 			} catch (e: Exception) {
 				if (e is CancellationException) {
 					log.info("Build was cancelled by the user.")
@@ -113,12 +141,16 @@ class BuildViewModel : ViewModel() {
 		}
 	}
 
-	private fun findPluginCgpFile(projectRoot: String, variant: AndroidModels.AndroidVariant): File? {
+	private fun findPluginCgpFile(
+		projectRoot: String,
+		variant: AndroidModels.AndroidVariant,
+	): File? {
 		val pluginDir = File(projectRoot, "build/plugin")
 		if (!pluginDir.exists()) return null
 
 		val isDebug = variant.name.contains("debug", ignoreCase = true)
-		return pluginDir.listFiles { file -> file.extension.equals("cgp", ignoreCase = true) }
+		return pluginDir
+			.listFiles { file -> file.extension.equals("cgp", ignoreCase = true) }
 			?.filter { it.name.contains("-debug") == isDebug }
 			?.maxByOrNull { it.lastModified() }
 	}

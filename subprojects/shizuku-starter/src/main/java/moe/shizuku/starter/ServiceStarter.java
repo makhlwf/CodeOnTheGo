@@ -9,7 +9,6 @@ import android.util.Log;
 import android.util.Pair;
 import com.itsaky.androidide.buildinfo.BuildInfo;
 import java.util.Locale;
-import moe.shizuku.api.BinderContainer;
 import moe.shizuku.starter.util.IContentProviderCompat;
 import rikka.hidden.compat.ActivityManagerApis;
 import rikka.shizuku.ShizukuApiConstants;
@@ -68,6 +67,7 @@ public class ServiceStarter {
 		Pair<IBinder, String> result = UserService.create(args);
 
 		if (result == null) {
+			Log.e(TAG, "main: unable to create user service");
 			System.exit(1);
 			return;
 		}
@@ -76,6 +76,7 @@ public class ServiceStarter {
 		token = result.second;
 
 		if (!sendBinder(service, token)) {
+			Log.e(TAG, "main: unable to send binder for service " + (service != null ? service.toString() : "null-service"));
 			System.exit(1);
 		}
 
@@ -123,19 +124,18 @@ public class ServiceStarter {
 			}
 
 			Bundle extra = new Bundle();
-			extra.putParcelable(EXTRA_BINDER, new BinderContainer(binder));
+			extra.putBinder(EXTRA_BINDER, binder);
 			extra.putString(ShizukuApiConstants.USER_SERVICE_ARG_TOKEN, token);
 
 			Bundle reply = IContentProviderCompat.call(provider, null, null, name, "sendUserService", null, extra);
 
 			if (reply != null) {
-				reply.setClassLoader(BinderContainer.class.getClassLoader());
 
 				Log.i(TAG, String.format("send binder to %s in user %d", packageName, userId));
-				BinderContainer container = reply.getParcelable(EXTRA_BINDER);
+				IBinder container = reply.getBinder(EXTRA_BINDER);
 
-				if (container != null && container.binder != null && container.binder.pingBinder()) {
-					shizukuBinder = container.binder;
+				if (container != null && container.pingBinder()) {
+					shizukuBinder = container;
 					shizukuBinder.linkToDeath(() -> {
 						Log.i(TAG, "exiting...");
 						System.exit(0);
